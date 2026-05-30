@@ -1,0 +1,58 @@
+# ======================================================================
+# Advanced Server Performance Analysis (ASPA) Configuration File
+# ======================================================================
+
+# Database Configuration
+# Supported drivers: SQLITE, MYSQL, MONGODB
+database:
+  driver: "SQLITE"
+  sqlite:
+    file: "analytics.db"
+  mysql:
+    host: "localhost"
+    port: 3306
+    database: "aspa_analytics"
+    username: "aspa"
+    password: "secure_password_here"
+    pool:
+      maximum-pool-size: 10
+      minimum-idle: 2
+      connection-timeout: 30000
+      idle-timeout: 600000
+      max-lifetime: 1800000
+  mongodb:
+    uri: "mongodb://localhost:27017"
+    database: "aspa_analytics"
+
+# Embedded Web Server Configuration
+server:
+  host: "0.0.0.0"
+  port: 8080
+  # Secret token used to access the dashboard REST API.
+  # The administrator must copy this token and use it during login.
+  api-token: ""
+
+# Metrics Ingestion Configurations
+ingestion:
+  # Interval in seconds to log raw server metrics (TPS, MSPT, RAM, CPU, Chunks, Entities)
+  collect-interval-seconds: 10
+  # Frequency in seconds to push batched database inserts to disk
+  db-flush-interval-seconds: 30
+
+# Data Analysis Configuration
+analysis:
+  # Frequency in minutes to crunch historical statistics, anomalies, and forecasting
+  crunch-interval-minutes: 15
+  # The statistical threshold (z-score) above the average MSPT to trigger a performance anomaly
+  anomaly-z-score-threshold: 2.5
+
+# Pterodactyl API Integration
+# Connect ASPA directly to your server management panel for remote backup management, power signals, and real-time host stats.
+pterodactyl:
+  enabled: false
+  # Base URL of your Pterodactyl panel (e.g. "https://panel.example.com")
+  url: "https://panel.example.com"
+  # Client API Key (starts with ptlc_...)
+  api-token: "ptlc_your_client_api_key_goes_here"
+  # The unique alphanumeric identifier for this server (usually 8 characters, e.g. "8f4b52c0")
+  server-id: ""

@@ -1,0 +1,80 @@
+# General
+# -------------------
+# OS generated files
+.DS_Store
+Thumbs.db
+ehthumbs.db
+Desktop.ini
+
+# Logs
+*.log
+logs/
+
+# Temporary files
+*.tmp
+*.swp
+*~
+
+# Build directories
+build/
+out/
+bin/
+
+# Maven / Gradle
+# If using Maven
+target/
+# If using Gradle
+.gradle/
+.gradle/
+
+# IDEs
+.idea/
+*.iml
+*.ipr
+*.iws
+.vscode/
+*.sublime-workspace
+*.sublime-project
+
+# Eclipse
+.project
+.settings/
+.metadata/
+
+# IntelliJ
+*.iml
+out/
+
+# NetBeans
+nbproject/private/
+build/**/generated/**
+
+# VSCode
+.vscode/
+
+# Node.js (if any)
+node_modules/
+
+# Python (if any)
+__pycache__/
+*.py[cod]
+
+# Java
+*.class
+*.jar
+!gradle/wrapper/gradle-wrapper.jar
+*.war
+*.ear
+*.iml
+
+# Minecraft plugin specific
+plugins/*.jar
+
+# Misc
+*.bak
+*.orig
+
+# Gemini
+GEMINI.md
+.gemini/
+# End of .gitignore

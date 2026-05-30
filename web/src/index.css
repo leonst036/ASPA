@@ -1,0 +1,61 @@
+@import url('https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700;800&family=Inter:wght@300;400;500;600;700&display=swap');
+
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  body {
+    @apply bg-plan-lightBg text-slate-800 transition-colors duration-300 antialiased font-sans;
+  }
+  
+  body.dark {
+    @apply bg-plan-bg text-slate-100;
+  }
+}
+
+/* Custom Scrollbar */
+::-webkit-scrollbar {
+  width: 5px;
+  height: 5px;
+}
+
+::-webkit-scrollbar-track {
+  @apply bg-transparent;
+}
+
+::-webkit-scrollbar-thumb {
+  @apply bg-slate-200 dark:bg-slate-800 rounded-full transition-all;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  @apply bg-slate-300 dark:bg-slate-700;
+}
+
+/* Micro-animations */
+.hover-card {
+  @apply transition-all duration-300 hover:-translate-y-0.5 hover:shadow-sm hover:border-slate-300 dark:hover:border-slate-800;
+}
+
+.glass-panel {
+  @apply bg-white/70 dark:bg-plan-card/75 backdrop-blur-xl border border-slate-200/50 dark:border-slate-800/50;
+}
+
+.glass-panel-hover {
+  @apply transition-all duration-300 hover:bg-white dark:hover:bg-plan-card hover:border-slate-200 dark:hover:border-slate-800 hover:shadow-sm;
+}
+
+/* SVG punchcard styling */
+.punch-cell {
+  @apply transition-all duration-200 hover:scale-125;
+}
+
+/* Hide scrollbar for clean horizontal scrolling */
+.scrollbar-none::-webkit-scrollbar {
+  display: none;
+}
+.scrollbar-none {
+  -ms-overflow-style: none;  /* IE and Edge */
+  scrollbar-width: none;  /* Firefox */
+}
+
