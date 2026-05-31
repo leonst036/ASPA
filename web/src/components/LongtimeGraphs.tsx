@@ -19,14 +19,14 @@ interface TimeRange {
 }
 
 const TIME_RANGES: TimeRange[] = [
-  { label: '1h',  ms: 3600000,         resolution: '1m',  resolutionLabel: '1min resolution' },
-  { label: '6h',  ms: 21600000,        resolution: '5m',  resolutionLabel: '5min resolution' },
-  { label: '12h', ms: 43200000,        resolution: '10m', resolutionLabel: '10min resolution' },
-  { label: '24h', ms: 86400000,        resolution: '15m', resolutionLabel: '15min resolution' },
-  { label: '3d',  ms: 259200000,       resolution: '30m', resolutionLabel: '30min resolution' },
-  { label: '7d',  ms: 604800000,       resolution: '1h',  resolutionLabel: '1h resolution' },
-  { label: '14d', ms: 1209600000,      resolution: '2h',  resolutionLabel: '2h resolution' },
-  { label: '30d', ms: 2592000000,      resolution: '6h',  resolutionLabel: '6h resolution' },
+  { label: '1h', ms: 3600000, resolution: '1m', resolutionLabel: '1min resolution' },
+  { label: '6h', ms: 21600000, resolution: '5m', resolutionLabel: '5min resolution' },
+  { label: '12h', ms: 43200000, resolution: '10m', resolutionLabel: '10min resolution' },
+  { label: '24h', ms: 86400000, resolution: '15m', resolutionLabel: '15min resolution' },
+  { label: '3d', ms: 259200000, resolution: '30m', resolutionLabel: '30min resolution' },
+  { label: '7d', ms: 604800000, resolution: '1h', resolutionLabel: '1h resolution' },
+  { label: '14d', ms: 1209600000, resolution: '2h', resolutionLabel: '2h resolution' },
+  { label: '30d', ms: 2592000000, resolution: '6h', resolutionLabel: '6h resolution' },
 ];
 
 // ─── Timestamp Formatting ────────────────────────────────────────────
@@ -50,10 +50,52 @@ export const LongtimeGraphs: React.FC = () => {
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [selectedRange, setSelectedRange] = useState<number>(3); // index into TIME_RANGES, default 24h
+  const [selectedRange, setSelectedRange] = useState<number | 'custom'>(3); // index into TIME_RANGES, or 'custom'
+  const [customDaysInput, setCustomDaysInput] = useState<number>(5);
+  const [customDays, setCustomDays] = useState<number>(5);
   const [autoRefresh, setAutoRefresh] = useState(false);
 
-  const currentRange = TIME_RANGES[selectedRange];
+  const currentRange = useMemo<TimeRange>(() => {
+    if (selectedRange === 'custom') {
+      const ms = customDays * 24 * 60 * 60 * 1000;
+
+      // Determine resolution based on custom days (align with backend)
+      let resolution = '6h';
+      let resolutionLabel = '6h resolution';
+      if (customDays <= 0.125) { // 3 hours
+        resolution = '1m';
+        resolutionLabel = '1min resolution';
+      } else if (customDays <= 0.5) { // 12 hours
+        resolution = '5m';
+        resolutionLabel = '5min resolution';
+      } else if (customDays <= 3) {
+        resolution = '15m';
+        resolutionLabel = '15min resolution';
+      } else if (customDays <= 14) {
+        resolution = '1h';
+        resolutionLabel = '1h resolution';
+      }
+
+      return {
+        label: `${customDays}d`,
+        ms,
+        resolution,
+        resolutionLabel,
+      };
+    }
+    return TIME_RANGES[selectedRange];
+  }, [selectedRange, customDays]);
+
+  // Debounce customDaysInput to customDays
+  useEffect(() => {
+    if (selectedRange !== 'custom') return;
+    const timer = setTimeout(() => {
+      if (customDaysInput >= 1) {
+        setCustomDays(customDaysInput);
+      }
+    }, 450);
+    return () => clearTimeout(timer);
+  }, [customDaysInput, selectedRange]);
 
   const fetchData = useCallback(async (isSilent = false) => {
     if (!isSilent) setLoading(true);
@@ -62,8 +104,8 @@ export const LongtimeGraphs: React.FC = () => {
 
     try {
       const now = Date.now();
-      const start = now - TIME_RANGES[selectedRange].ms;
-      const data = await getLongtimeMetrics(start, now, TIME_RANGES[selectedRange].resolution);
+      const start = now - currentRange.ms;
+      const data = await getLongtimeMetrics(start, now, currentRange.resolution);
       setMetrics(data);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to fetch longtime metrics.');
@@ -71,7 +113,7 @@ export const LongtimeGraphs: React.FC = () => {
       setLoading(false);
       setRefreshing(false);
     }
-  }, [selectedRange]);
+  }, [currentRange]);
 
   // Initial fetch & re-fetch on range change
   useEffect(() => {
@@ -157,6 +199,8 @@ export const LongtimeGraphs: React.FC = () => {
           currentRange={currentRange}
           selectedRange={selectedRange}
           setSelectedRange={setSelectedRange}
+          customDaysInput={customDaysInput}
+          setCustomDaysInput={setCustomDaysInput}
           autoRefresh={autoRefresh}
           setAutoRefresh={setAutoRefresh}
           refreshing={refreshing}
@@ -183,6 +227,8 @@ export const LongtimeGraphs: React.FC = () => {
         currentRange={currentRange}
         selectedRange={selectedRange}
         setSelectedRange={setSelectedRange}
+        customDaysInput={customDaysInput}
+        setCustomDaysInput={setCustomDaysInput}
         autoRefresh={autoRefresh}
         setAutoRefresh={setAutoRefresh}
         refreshing={refreshing}
@@ -647,8 +693,10 @@ export const LongtimeGraphs: React.FC = () => {
 
 interface HeaderProps {
   currentRange: TimeRange;
-  selectedRange: number;
-  setSelectedRange: (i: number) => void;
+  selectedRange: number | 'custom';
+  setSelectedRange: (i: number | 'custom') => void;
+  customDaysInput: number;
+  setCustomDaysInput: (d: number) => void;
   autoRefresh: boolean;
   setAutoRefresh: (v: boolean) => void;
   refreshing: boolean;
@@ -657,6 +705,7 @@ interface HeaderProps {
 
 const Header: React.FC<HeaderProps> = ({
   currentRange, selectedRange, setSelectedRange,
+  customDaysInput, setCustomDaysInput,
   autoRefresh, setAutoRefresh, refreshing, onRefresh,
 }) => (
   <div className="space-y-4">
@@ -666,7 +715,7 @@ const Header: React.FC<HeaderProps> = ({
           <TrendingUp className="w-5.5 h-5.5 text-plan-cyan" /> Longtime Analytics
         </h2>
         <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
-          Grafana-style historical server performance panels with configurable time windows.
+          Historical server performance panels with configurable time windows.
         </p>
       </div>
       <div className="flex items-center gap-2.5">
@@ -679,11 +728,10 @@ const Header: React.FC<HeaderProps> = ({
         {/* Auto-Refresh Toggle */}
         <button
           onClick={() => setAutoRefresh(!autoRefresh)}
-          className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg border text-xs font-bold transition-all ${
-            autoRefresh
+          className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg border text-xs font-bold transition-all ${autoRefresh
               ? 'border-emerald-400/50 dark:border-emerald-600/30 bg-emerald-50 dark:bg-emerald-950/20 text-emerald-600 dark:text-emerald-400'
               : 'border-slate-200 dark:border-slate-800/80 bg-white dark:bg-slate-900 text-slate-500 dark:text-slate-400'
-          }`}
+            }`}
           title={autoRefresh ? 'Auto-refresh ON (60s)' : 'Auto-refresh OFF'}
         >
           {autoRefresh ? <Pause className="w-3 h-3" /> : <Play className="w-3 h-3" />}
@@ -694,7 +742,7 @@ const Header: React.FC<HeaderProps> = ({
         <button
           onClick={onRefresh}
           disabled={refreshing}
-          className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-slate-200 dark:border-slate-800/80 bg-white dark:bg-slate-900 text-slate-700 dark:text-slate-300 text-xs font-bold shadow-sm hover:bg-slate-50 dark:hover:bg-slate-800 active:scale-[0.98] transition-all"
+          className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-slate-200 dark:border-slate-800/80 bg-white dark:bg-slate-900 text-slate-700 dark:text-slate-350 text-xs font-bold shadow-sm hover:bg-slate-50 dark:hover:bg-slate-800 active:scale-[0.98] transition-all"
         >
           <RefreshCw className={`w-3.5 h-3.5 ${refreshing ? 'animate-spin text-plan-cyan' : ''}`} />
           Refresh
@@ -710,17 +758,64 @@ const Header: React.FC<HeaderProps> = ({
             <button
               key={range.label}
               onClick={() => setSelectedRange(idx)}
-              className={`px-4 py-2 rounded-lg text-xs font-bold tracking-wide transition-all whitespace-nowrap ${
-                selectedRange === idx
+              className={`px-4 py-2 rounded-lg text-xs font-bold tracking-wide transition-all whitespace-nowrap ${selectedRange === idx
                   ? 'bg-white dark:bg-slate-800 text-plan-blue dark:text-cyan-400 shadow-sm font-black'
                   : 'text-slate-500 dark:text-slate-450 hover:text-slate-900 dark:hover:text-white'
-              }`}
+                }`}
             >
               {range.label}
             </button>
           ))}
+          <button
+            onClick={() => setSelectedRange('custom')}
+            className={`px-4 py-2 rounded-lg text-xs font-bold tracking-wide transition-all whitespace-nowrap ${selectedRange === 'custom'
+                ? 'bg-white dark:bg-slate-800 text-plan-blue dark:text-cyan-400 shadow-sm font-black'
+                : 'text-slate-500 dark:text-slate-450 hover:text-slate-900 dark:hover:text-white'
+              }`}
+          >
+            Custom
+          </button>
         </div>
       </div>
+
+      {selectedRange === 'custom' && (
+        <div className="flex items-center gap-1.5 bg-slate-100/50 dark:bg-slate-900/60 px-2 py-1 rounded-xl border border-slate-200/40 dark:border-slate-800/40 text-slate-700 dark:text-slate-350 shadow-inner h-9 animate-fade-in shrink-0">
+          <button
+            type="button"
+            onClick={() => setCustomDaysInput(Math.max(1, customDaysInput - 1))}
+            className="w-6 h-6 rounded-md flex items-center justify-center bg-white dark:bg-slate-800 border border-slate-200/60 dark:border-slate-700 hover:bg-slate-50 dark:hover:bg-slate-750 active:scale-95 transition-all text-xs font-bold select-none text-slate-500 dark:text-slate-400"
+          >
+            -
+          </button>
+          <input
+            type="number"
+            min="1"
+            max="365"
+            value={customDaysInput || ''}
+            onChange={(e) => {
+              const val = parseInt(e.target.value, 10);
+              if (!isNaN(val)) {
+                setCustomDaysInput(Math.max(1, Math.min(365, val)));
+              } else {
+                setCustomDaysInput(0);
+              }
+            }}
+            onBlur={() => {
+              if (!customDaysInput || customDaysInput < 1) setCustomDaysInput(1);
+            }}
+            className="w-10 bg-transparent border-0 outline-none text-slate-800 dark:text-white text-xs font-black text-center p-0 focus:ring-0 focus:outline-none [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
+          />
+          <span className="text-[10px] font-bold text-slate-400 dark:text-slate-500 uppercase select-none pr-1">Days</span>
+          <button
+            type="button"
+            onClick={() => setCustomDaysInput(Math.min(365, customDaysInput + 1))}
+            className="w-6 h-6 rounded-md flex items-center justify-center bg-white dark:bg-slate-800 border border-slate-200/60 dark:border-slate-700 hover:bg-slate-50 dark:hover:bg-slate-750 active:scale-95 transition-all text-xs font-bold select-none text-slate-500 dark:text-slate-400"
+          >
+            +
+          </button>
+        </div>
+      )}
+
       {/* Mobile resolution badge */}
       <span className="flex sm:hidden items-center gap-1.5 px-2.5 py-1 rounded-lg bg-plan-cyan/10 dark:bg-plan-cyan/5 border border-plan-cyan/20 dark:border-plan-cyan/10 text-[9.5px] font-bold text-plan-cyan uppercase tracking-wider select-none">
         <Clock className="w-3 h-3" />
