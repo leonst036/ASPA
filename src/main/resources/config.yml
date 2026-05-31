@@ -28,9 +28,6 @@ database:
 server:
   host: "0.0.0.0"
   port: 8080
-  # Secret token used to access the dashboard REST API.
-  # The administrator must copy this token and use it during login.
-  api-token: ""
 
 # Metrics Ingestion Configurations
 ingestion:

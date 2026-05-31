@@ -17,8 +17,6 @@ import org.bukkit.command.TabExecutor
 import org.bukkit.configuration.ConfigurationSection
 import org.bukkit.plugin.java.JavaPlugin
 import org.bukkit.scheduler.BukkitTask
-import java.security.SecureRandom
-import java.util.Base64
 import java.util.concurrent.CompletableFuture
 
 class ASPA : JavaPlugin(), TabExecutor {
@@ -99,10 +97,8 @@ class ASPA : JavaPlugin(), TabExecutor {
         )
 
         val port = config.getInt("server.port", 8080)
-        val apiToken = resolveApiToken(config.getString("server.api-token"))
         embeddedServer = EmbeddedServer(
             port,
-            apiToken,
             databaseProvider!!,
             serverMetricCollector!!,
             analysisEngine!!,
@@ -193,38 +189,6 @@ class ASPA : JavaPlugin(), TabExecutor {
                 "/_/  |_/____/_/   /_/  |_|\n" +
                 "  Advanced Server Performance Analysis"
         )
-    }
-
-    private fun resolveApiToken(configuredToken: String?): String {
-        val token = configuredToken?.trim().orEmpty()
-        if (token.isEmpty() || isInsecureToken(token)) {
-            val generated = generateApiToken()
-            config.set("server.api-token", generated)
-            saveConfig()
-            logger.warning(
-                "Generated a new API token because the configuration contained an empty or default value. " +
-                    "Use /aspa token to retrieve it."
-            )
-            return generated
-        }
-        return token
-    }
-
-    private fun isInsecureToken(token: String): Boolean {
-        return token in setOf(
-            "ASPA_SECURE_API_GATEWAY_TOKEN_12345",
-            "CHANGE_ME",
-            "CHANGEME",
-            "REPLACE_ME",
-            "REPLACE-ME",
-            "YOUR_TOKEN_HERE"
-        )
-    }
-
-    private fun generateApiToken(): String {
-        val bytes = ByteArray(32)
-        SecureRandom().nextBytes(bytes)
-        return Base64.getUrlEncoder().withoutPadding().encodeToString(bytes)
     }
 
     private fun startSchedulers() {
@@ -327,7 +291,7 @@ class ASPA : JavaPlugin(), TabExecutor {
         }
 
         if (args.isEmpty()) {
-            sender.sendMessage("§eUsage: /aspa [reload|status|token]")
+            sender.sendMessage("§eUsage: /aspa [reload|status]")
             return true
         }
 
@@ -338,11 +302,7 @@ class ASPA : JavaPlugin(), TabExecutor {
                 sender.sendMessage("§a[ASPA] Configuration reloaded successfully!")
             }
             "status" -> showStatus(sender)
-            "token" -> {
-                val token = config.getString("server.api-token", "Not Set")
-                sender.sendMessage("§a[ASPA] Secure API Dashboard Token: §f$token")
-            }
-            else -> sender.sendMessage("§cUnknown subcommand! Usage: /aspa [reload|status|token]")
+            else -> sender.sendMessage("§cUnknown subcommand! Usage: /aspa [reload|status]")
         }
         return true
     }
@@ -407,7 +367,7 @@ class ASPA : JavaPlugin(), TabExecutor {
         if (args.size == 1) {
             val completions = ArrayList<String>()
             val input = args[0].lowercase()
-            for (sub in arrayOf("reload", "status", "token")) {
+            for (sub in arrayOf("reload", "status")) {
                 if (sub.startsWith(input)) {
                     completions.add(sub)
                 }

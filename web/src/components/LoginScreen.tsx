@@ -9,12 +9,10 @@ interface LoginScreenProps {
 export const LoginScreen: React.FC<LoginScreenProps> = ({ onLoginSuccess }) => {
   const [setupRequired, setSetupRequired] = useState(false);
   const [checkingSetup, setCheckingSetup] = useState(true);
-  const [isLegacyToken, setIsLegacyToken] = useState(false);
 
   // Sign-in state
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
-  const [token, setToken] = useState('');
   const [customUrl, setCustomUrl] = useState('');
   
   const [loading, setLoading] = useState(false);
@@ -58,21 +56,6 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({ onLoginSuccess }) => {
         setTimeout(() => {
           onLoginSuccess();
         }, 800);
-      } else if (isLegacyToken) {
-        // Log in using legacy API token
-        if (!token.trim()) {
-          throw new Error('API Token is required');
-        }
-        setApiToken(token.trim());
-        const status = await getSystemStatus();
-        if (status && (status.status === 'ok' || status.status === 'online')) {
-          setSuccess(true);
-          setTimeout(() => {
-            onLoginSuccess();
-          }, 800);
-        } else {
-          throw new Error('Invalid system status returned');
-        }
       } else {
         // Log in using username and password
         if (!username.trim() || !password) {
@@ -180,7 +163,6 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({ onLoginSuccess }) => {
             </div>
           </div>
 
-          {!isLegacyToken ? (
             <>
               <div>
                 <label className="block text-[10px] font-black uppercase tracking-widest text-slate-500 mb-1.5 pl-0.5">
@@ -222,30 +204,6 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({ onLoginSuccess }) => {
                 </div>
               </div>
             </>
-          ) : (
-            <div>
-              <label className="block text-[10px] font-black uppercase tracking-widest text-slate-500 mb-1.5 pl-0.5">
-                API Access Gateway Token
-              </label>
-              <div className="relative">
-                <span className="absolute inset-y-0 left-0 pl-3 flex items-center text-slate-400 dark:text-slate-500">
-                  <KeyRound className="w-4 h-4" />
-                </span>
-                <input
-                  type="password"
-                  required
-                  placeholder="Paste your secret ASPA access token"
-                  value={token}
-                  onChange={(e) => setToken(e.target.value)}
-                  disabled={loading || success}
-                  className="w-full pl-9 pr-3 py-2.5 rounded-xl border border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-900 text-slate-800 dark:text-slate-100 text-sm focus:outline-none focus:ring-2 focus:ring-plan-cyan/40 focus:border-plan-cyan transition-all placeholder:text-slate-400 dark:placeholder:text-slate-500"
-                />
-              </div>
-              <p className="text-[9px] text-slate-500 dark:text-slate-400 font-bold block mt-1.5 pl-0.5">
-                Token is defined in the server's <code>config.yml</code> file.
-              </p>
-            </div>
-          )}
 
           <button
             type="submit"
@@ -265,19 +223,7 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({ onLoginSuccess }) => {
           </button>
         </form>
 
-        {!setupRequired && (
-          <div className="mt-4 text-center">
-            <button
-              onClick={() => {
-                setIsLegacyToken(!isLegacyToken);
-                setError(null);
-              }}
-              className="text-[10px] text-slate-500 hover:text-plan-cyan font-black uppercase tracking-wider transition-colors"
-            >
-              {isLegacyToken ? 'Use Username & Password Login' : 'Sign in with legacy API Token'}
-            </button>
-          </div>
-        )}
+
 
         <div className="mt-6 pt-4 border-t border-slate-200 dark:border-slate-800/40 flex flex-col items-center gap-3">
           <span className="text-[9px] text-slate-500 dark:text-slate-500 font-bold uppercase tracking-wider block">

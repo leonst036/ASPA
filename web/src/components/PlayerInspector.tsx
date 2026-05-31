@@ -192,7 +192,7 @@ export const PlayerInspector: React.FC = () => {
       return (
         <div
           key={key}
-          className="h-10 w-10 rounded-lg border border-slate-200/50 dark:border-slate-800/40 bg-slate-50/40 dark:bg-slate-900/30"
+          className="h-10 w-10 rounded-lg border border-slate-200/60 dark:border-slate-800/50 bg-gradient-to-br from-slate-50/80 via-white/40 to-slate-100/60 dark:from-slate-900/40 dark:via-slate-900/20 dark:to-slate-950/30"
           title="Empty"
         />
       );
@@ -203,23 +203,28 @@ export const PlayerInspector: React.FC = () => {
     return (
       <div
         key={key}
-        className="relative h-10 w-10 rounded-lg border border-slate-200/70 dark:border-slate-800/50 bg-white/60 dark:bg-slate-900/40 flex items-center justify-center"
+        className="group relative h-10 w-10 rounded-lg border border-slate-200/70 dark:border-slate-800/50 bg-white/70 dark:bg-slate-900/40 flex items-center justify-center shadow-[inset_0_0_0_1px_rgba(255,255,255,0.35)] dark:shadow-[inset_0_0_0_1px_rgba(255,255,255,0.06)] transition-all hover:-translate-y-0.5 hover:shadow-md hover:border-plan-blue/40"
         title={buildItemTitle(slot)}
       >
         <img
           src={iconFallbacks[0]}
           data-fallback-index="0"
           alt={slot.displayName || slot.material}
-          className="h-7 w-7 object-contain"
+          className="h-7 w-7 object-contain drop-shadow-sm"
           onError={handleImgFallback(iconFallbacks)}
         />
         {slot.amount > 1 && (
-          <span className="absolute bottom-1 right-1 text-[9px] font-black text-slate-900 dark:text-white bg-white/80 dark:bg-slate-900/80 rounded px-1">
+          <span className="absolute bottom-1 right-1 text-[9px] font-black text-slate-900 dark:text-white bg-white/85 dark:bg-slate-900/85 rounded px-1 ring-1 ring-black/5 dark:ring-white/10">
             {slot.amount}
           </span>
         )}
       </div>
     );
+  };
+
+  const countFilledSlots = (slots: Array<PlayerInventorySlot | null> | null | undefined) => {
+    if (!slots) return 0;
+    return slots.reduce((sum, slot) => sum + (slot ? 1 : 0), 0);
   };
 
   const [quickSelects, setQuickSelects] = useState<{ username: string; uuid: string }[]>([]);
@@ -274,6 +279,12 @@ export const PlayerInspector: React.FC = () => {
 
   const profileHeadFallbacks = profile ? buildHeadFallbacks(profile.uuid, profile.username, 64) : [];
   const profileBodyFallbacks = profile ? buildBodyFallbacks(profile.uuid, profile.username, 256) : [];
+  const filledInventorySlots = inventory ? countFilledSlots(inventory.inventory) : 0;
+  const filledArmorSlots = inventory ? countFilledSlots(inventory.armor) + (inventory.offhand ? 1 : 0) : 0;
+  const filledEnderSlots = inventory ? countFilledSlots(inventory.enderChest) : 0;
+  const inventorySlotTotal = 36;
+  const armorSlotTotal = 5;
+  const enderSlotTotal = 27;
 
   return (
     <div className="space-y-6">
@@ -637,33 +648,66 @@ export const PlayerInspector: React.FC = () => {
 
           {/* Invsee inventory snapshot */}
           <div className="bg-white/60 dark:bg-plan-card/60 border border-slate-200/50 dark:border-slate-800/40 shadow-sm rounded-2xl p-5 relative overflow-hidden">
-            <div className="flex flex-wrap items-center justify-between gap-3 mb-4">
-              <h4 className="text-xs font-black text-slate-800 dark:text-white flex items-center gap-2 uppercase tracking-wider">
-                <Package className="w-4 h-4 text-plan-blue" /> Invsee Inventory
-              </h4>
+            <div className="flex flex-wrap items-start justify-between gap-3 mb-4">
+              <div className="space-y-1">
+                <h4 className="text-xs font-black text-slate-800 dark:text-white flex items-center gap-2 uppercase tracking-wider">
+                  <Package className="w-4 h-4 text-plan-blue" /> Invsee Inventory
+                </h4>
+                <p className="text-[9px] font-semibold text-slate-400 dark:text-slate-500 uppercase tracking-[0.18em]">
+                  Snapshot view for inventory and ender chest state
+                </p>
+              </div>
               <div className="flex items-center gap-2">
                 <button
                   onClick={handleToggleInventory}
                   disabled={inventoryLoading}
-                  className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg border border-slate-200/60 dark:border-slate-800/60 bg-white/60 dark:bg-slate-900/40 text-[9px] font-black uppercase tracking-wider text-slate-500 dark:text-slate-400 hover:text-plan-blue hover:border-plan-blue/40 transition-colors disabled:opacity-60"
+                  className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg border text-[9px] font-black uppercase tracking-wider transition-colors disabled:opacity-60 ${
+                    inventoryVisible
+                      ? 'border-plan-blue/50 bg-plan-blue/10 text-plan-blue'
+                      : 'border-slate-200/60 dark:border-slate-800/60 bg-white/60 dark:bg-slate-900/40 text-slate-500 dark:text-slate-400 hover:text-plan-blue hover:border-plan-blue/40'
+                  }`}
                 >
                   {inventoryVisible ? 'Hide Invsee' : 'Show Invsee'}
                 </button>
                 <button
                   onClick={handleToggleEnder}
                   disabled={inventoryLoading}
-                  className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg border border-slate-200/60 dark:border-slate-800/60 bg-white/60 dark:bg-slate-900/40 text-[9px] font-black uppercase tracking-wider text-slate-500 dark:text-slate-400 hover:text-plan-blue hover:border-plan-blue/40 transition-colors disabled:opacity-60"
+                  className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg border text-[9px] font-black uppercase tracking-wider transition-colors disabled:opacity-60 ${
+                    enderVisible
+                      ? 'border-plan-blue/50 bg-plan-blue/10 text-plan-blue'
+                      : 'border-slate-200/60 dark:border-slate-800/60 bg-white/60 dark:bg-slate-900/40 text-slate-500 dark:text-slate-400 hover:text-plan-blue hover:border-plan-blue/40'
+                  }`}
                 >
                   {enderVisible ? 'Hide Ecsee' : 'Show Ecsee'}
                 </button>
                 <button
                   onClick={() => profile && loadInventory(profile.uuid)}
                   disabled={inventoryLoading}
-                  className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg border border-slate-200/60 dark:border-slate-800/60 bg-white/60 dark:bg-slate-900/40 text-[9px] font-black uppercase tracking-wider text-slate-500 dark:text-slate-400 hover:text-plan-blue hover:border-plan-blue/40 transition-colors disabled:opacity-60"
+                  className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-slate-200/60 dark:border-slate-800/60 bg-white/60 dark:bg-slate-900/40 text-[9px] font-black uppercase tracking-wider text-slate-500 dark:text-slate-400 hover:text-plan-blue hover:border-plan-blue/40 transition-colors disabled:opacity-60"
                 >
                   <RefreshCw className={`w-3 h-3 ${inventoryLoading ? 'animate-spin' : ''}`} /> Refresh
                 </button>
               </div>
+            </div>
+
+            <div className="flex flex-wrap items-center gap-3 text-[9px] font-black uppercase tracking-wider text-slate-400 dark:text-slate-500 mb-4">
+              {inventory ? (
+                <>
+                  <span className="px-2 py-1 rounded-full border border-slate-200/60 dark:border-slate-800/60 bg-slate-100/60 dark:bg-slate-900/40">
+                    Inventory {filledInventorySlots}/{inventorySlotTotal}
+                  </span>
+                  <span className="px-2 py-1 rounded-full border border-slate-200/60 dark:border-slate-800/60 bg-slate-100/60 dark:bg-slate-900/40">
+                    Armor + Offhand {filledArmorSlots}/{armorSlotTotal}
+                  </span>
+                  <span className="px-2 py-1 rounded-full border border-slate-200/60 dark:border-slate-800/60 bg-slate-100/60 dark:bg-slate-900/40">
+                    Ender {filledEnderSlots}/{enderSlotTotal}
+                  </span>
+                </>
+              ) : (
+                <span className="px-2 py-1 rounded-full border border-slate-200/60 dark:border-slate-800/60 bg-slate-100/60 dark:bg-slate-900/40">
+                  Snapshot not loaded
+                </span>
+              )}
             </div>
 
             {inventoryLoading && (
@@ -685,34 +729,32 @@ export const PlayerInspector: React.FC = () => {
             )}
 
             {!inventoryLoading && inventory && inventoryVisible && (
-              <div className="grid grid-cols-1 xl:grid-cols-[200px_1fr] gap-6">
-                <div className="space-y-4">
-                  <div>
-                    <span className="text-[9px] font-black uppercase tracking-[0.18em] text-slate-400 dark:text-slate-500 block mb-2">
-                      Armor + Offhand
-                    </span>
-                    <div className="grid grid-cols-2 gap-2">
-                      {inventory.armor.map((slot, idx) => renderInventorySlot(slot, `armor-${idx}`))}
-                      {renderInventorySlot(inventory.offhand, 'offhand')}
-                    </div>
+              <div className="grid grid-cols-1 xl:grid-cols-[220px_1fr] gap-6">
+                <div className="rounded-xl border border-slate-200/60 dark:border-slate-800/50 bg-gradient-to-br from-slate-50/80 via-white/50 to-slate-100/80 dark:from-slate-950/40 dark:via-slate-900/40 dark:to-slate-950/70 p-4">
+                  <span className="text-[9px] font-black uppercase tracking-[0.18em] text-slate-400 dark:text-slate-500 block mb-3">
+                    Armor + Offhand
+                  </span>
+                  <div className="grid grid-cols-2 gap-2">
+                    {inventory.armor.map((slot, idx) => renderInventorySlot(slot, `armor-${idx}`))}
+                    {renderInventorySlot(inventory.offhand, 'offhand')}
                   </div>
                 </div>
 
-                <div className="space-y-4">
+                <div className="rounded-xl border border-slate-200/60 dark:border-slate-800/50 bg-gradient-to-br from-white/70 via-slate-50/70 to-slate-100/70 dark:from-slate-900/60 dark:via-slate-900/40 dark:to-slate-950/60 p-4 space-y-4">
                   <div>
-                    <span className="text-[9px] font-black uppercase tracking-[0.18em] text-slate-400 dark:text-slate-500 block mb-2">
+                    <span className="text-[9px] font-black uppercase tracking-[0.18em] text-slate-400 dark:text-slate-500 block mb-3">
                       Inventory
                     </span>
-                    <div className="grid grid-cols-9 gap-1">
+                    <div className="grid grid-cols-9 gap-1.5">
                       {inventory.inventory.slice(0, 27).map((slot, idx) => renderInventorySlot(slot, `inv-${idx}`))}
                     </div>
                   </div>
 
                   <div>
-                    <span className="text-[9px] font-black uppercase tracking-[0.18em] text-slate-400 dark:text-slate-500 block mb-2">
+                    <span className="text-[9px] font-black uppercase tracking-[0.18em] text-slate-400 dark:text-slate-500 block mb-3">
                       Hotbar
                     </span>
-                    <div className="grid grid-cols-9 gap-1">
+                    <div className="grid grid-cols-9 gap-1.5">
                       {inventory.inventory.slice(27, 36).map((slot, idx) =>
                         renderInventorySlot(slot, `hotbar-${idx}`)
                       )}
@@ -723,11 +765,11 @@ export const PlayerInspector: React.FC = () => {
             )}
 
             {!inventoryLoading && inventory && enderVisible && (
-              <div className="mt-5">
-                <span className="text-[9px] font-black uppercase tracking-[0.18em] text-slate-400 dark:text-slate-500 block mb-2">
+              <div className="mt-6 rounded-xl border border-slate-200/60 dark:border-slate-800/50 bg-gradient-to-br from-slate-50/70 via-white/60 to-slate-100/80 dark:from-slate-950/50 dark:via-slate-900/40 dark:to-slate-950/70 p-4">
+                <span className="text-[9px] font-black uppercase tracking-[0.18em] text-slate-400 dark:text-slate-500 block mb-3">
                   Ender Chest
                 </span>
-                <div className="grid grid-cols-9 gap-1">
+                <div className="grid grid-cols-9 gap-1.5">
                   {inventory.enderChest.map((slot, idx) => renderInventorySlot(slot, `ender-${idx}`))}
                 </div>
               </div>

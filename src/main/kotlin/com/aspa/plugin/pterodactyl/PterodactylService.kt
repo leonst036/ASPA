@@ -113,6 +113,15 @@ class PterodactylService(
             }
     }
 
+    fun readConsoleOutput(): CompletableFuture<List<String>> {
+        if (!isEnabled()) {
+            return CompletableFuture.failedFuture(IllegalStateException("Pterodactyl integration is disabled."))
+        }
+
+        logger.warning("Pterodactyl console output is not available via HTTP client API; returning empty log set.")
+        return CompletableFuture.completedFuture(emptyList())
+    }
+
     fun listBackups(): CompletableFuture<String> {
         if (!isEnabled()) {
             return CompletableFuture.completedFuture("[]")
