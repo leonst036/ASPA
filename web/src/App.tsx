@@ -1,4 +1,5 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, lazy, Suspense } from 'react';
+import { useLocation, useNavigate, Routes, Route, Navigate } from 'react-router-dom';
 import { 
   Activity, 
   Globe, 
@@ -22,24 +23,107 @@ import {
   Users
 } from 'lucide-react';
 import { LoginScreen } from './components/LoginScreen';
-import { ServerHealth } from './components/ServerHealth';
-import { PlayerAnalytics } from './components/PlayerAnalytics';
-import { PlayerInspector } from './components/PlayerInspector';
-import { LongtimeGraphs } from './components/LongtimeGraphs';
-import { PterodactylDashboard } from './components/PterodactylDashboard';
-import { UserManagement } from './components/UserManagement';
 import { getApiToken, clearAuth, getSystemStatus, getPterodactylStatus, getCurrentUser } from './utils/api';
 import type { SystemStatus, PterodactylStatus } from './types';
+
+// Lazy load named exports
+const ServerHealth = lazy(() => import('./components/ServerHealth').then(m => ({ default: m.ServerHealth })));
+const PlayerAnalytics = lazy(() => import('./components/PlayerAnalytics').then(m => ({ default: m.PlayerAnalytics })));
+const PlayerInspector = lazy(() => import('./components/PlayerInspector').then(m => ({ default: m.PlayerInspector })));
+const LongtimeGraphs = lazy(() => import('./components/LongtimeGraphs').then(m => ({ default: m.LongtimeGraphs })));
+const PterodactylDashboard = lazy(() => import('./components/PterodactylDashboard').then(m => ({ default: m.PterodactylDashboard })));
+const UserManagement = lazy(() => import('./components/UserManagement').then(m => ({ default: m.UserManagement })));
+
+const TabLoader = () => (
+  <div className="flex items-center justify-center min-h-[400px]">
+    <div className="flex flex-col items-center gap-3 text-plan-cyan animate-pulse">
+      <div className="w-10 h-10 rounded-xl bg-plan-cyan/15 flex items-center justify-center border border-plan-cyan/35 shadow-md shadow-plan-cyan/5">
+        <Activity className="w-5 h-5 text-plan-cyan animate-spin" />
+      </div>
+      <span className="text-[10px] font-bold tracking-widest uppercase">Loading workspace components...</span>
+    </div>
+  </div>
+);
 
 function App() {
   const [isAuthenticated, setIsAuthenticated] = useState<boolean>(false);
   const [checkingAuth, setCheckingAuth] = useState<boolean>(true);
-  const [activeTab, setActiveTab] = useState<'health' | 'analytics' | 'inspector' | 'longtime' | 'pterodactyl' | 'users'>('health');
   const [isDark, setIsDark] = useState<boolean>(false);
   const [status, setStatus] = useState<SystemStatus | null>(null);
   const [pterodactylStatus, setPterodactylStatus] = useState<PterodactylStatus | null>(null);
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState<boolean>(false);
   const [user, setUser] = useState<{ username: string; role: string; permissions: string[] } | null>(null);
+
+  const location = useLocation();
+  const navigate = useNavigate();
+
+  // Map path to active tab
+  const getActiveTab = (pathname: string): 'health' | 'analytics' | 'inspector' | 'longtime' | 'pterodactyl' | 'users' => {
+    const tab = pathname.substring(1);
+    const validTabs = ['health', 'analytics', 'inspector', 'longtime', 'pterodactyl', 'users'];
+    return validTabs.includes(tab) ? (tab as any) : 'health';
+  };
+
+  const activeTab = getActiveTab(location.pathname);
+
+  // Legacy ?tab= redirection logic
+  useEffect(() => {
+    const searchParams = new URLSearchParams(location.search);
+    const legacyTab = searchParams.get('tab');
+    if (legacyTab) {
+      const validTabs = ['health', 'analytics', 'inspector', 'longtime', 'pterodactyl', 'users'];
+      if (validTabs.includes(legacyTab)) {
+        navigate(`/${legacyTab}`, { replace: true });
+      }
+    }
+  }, [location.search, navigate]);
+
+  // Client-side permission routing and default redirects
+  useEffect(() => {
+    if (isAuthenticated && user) {
+      const allowed = user.permissions;
+      const isAdmin = user.role === 'ADMIN';
+      const currentPath = location.pathname.substring(1);
+
+      const getFirstAllowedTab = (userData: typeof user, pterodactylEnabled = false): string => {
+        const allowedTabs = userData?.permissions || [];
+        const isUserAdmin = userData?.role === 'ADMIN';
+        if (isUserAdmin) return 'health';
+        if (allowedTabs.includes('health')) return 'health';
+        if (allowedTabs.includes('analytics')) return 'analytics';
+        if (allowedTabs.includes('inspector')) return 'inspector';
+        if (allowedTabs.includes('longtime')) return 'longtime';
+        if (allowedTabs.includes('pterodactyl') && pterodactylEnabled) return 'pterodactyl';
+        return '';
+      };
+
+      // Redirect root path to first allowed tab
+      if (!currentPath) {
+        const target = getFirstAllowedTab(user, pterodactylStatus?.enabled);
+        if (target) {
+          navigate(`/${target}`, { replace: true });
+        }
+        return;
+      }
+
+      // Check permissions for current tab/route
+      const hasPermission = isAdmin || (
+        (currentPath === 'users' && isAdmin) ||
+        (currentPath === 'health' && allowed.includes('health')) ||
+        (currentPath === 'analytics' && allowed.includes('analytics')) ||
+        (currentPath === 'inspector' && allowed.includes('inspector')) ||
+        (currentPath === 'longtime' && allowed.includes('longtime')) ||
+        (currentPath === 'pterodactyl' && allowed.includes('pterodactyl') && pterodactylStatus?.enabled)
+      );
+
+      if (!hasPermission) {
+        const target = getFirstAllowedTab(user, pterodactylStatus?.enabled);
+        if (target) {
+          navigate(`/${target}`, { replace: true });
+        }
+      }
+    }
+  }, [isAuthenticated, user, location.pathname, pterodactylStatus, navigate]);
 
   // Initialize Theme and Auth credentials on Mount
   useEffect(() => {
@@ -82,15 +166,6 @@ function App() {
       getCurrentUser()
         .then((userData) => {
           setUser(userData);
-          // Set default permitted tab
-          const allowed = userData.permissions;
-          if (allowed.length > 0 && !allowed.includes(activeTab as any) && activeTab !== 'users') {
-            if (allowed.includes('health')) setActiveTab('health');
-            else if (allowed.includes('analytics')) setActiveTab('analytics');
-            else if (allowed.includes('inspector')) setActiveTab('inspector');
-            else if (allowed.includes('longtime')) setActiveTab('longtime');
-            else if (allowed.includes('pterodactyl') && pterodactylStatus?.enabled) setActiveTab('pterodactyl');
-          }
         })
         .catch(console.error);
       getSystemStatus().then(setStatus).catch(console.error);
@@ -98,10 +173,18 @@ function App() {
     }
   }, [isAuthenticated]);
 
-  // Update browser tab title dynamically based on navigation
+  // Update browser tab title and meta description dynamically based on navigation
   useEffect(() => {
     if (!isAuthenticated) {
       document.title = "ASPA Analytics - Secure Sign In";
+      
+      let metaDescription = document.querySelector('meta[name="description"]');
+      if (!metaDescription) {
+        metaDescription = document.createElement('meta');
+        metaDescription.setAttribute('name', 'description');
+        document.head.appendChild(metaDescription);
+      }
+      metaDescription.setAttribute('content', 'Sign in to access secure Minecraft server metrics, real-time performance graphs, and player cohort analytics.');
       return;
     }
     const tabNames: Record<string, string> = {
@@ -112,8 +195,24 @@ function App() {
       pterodactyl: "Pterodactyl Panel",
       users: "User Management"
     };
+    const tabDescriptions: Record<string, string> = {
+      health: "Monitor real-time server health, ticks per second (TPS), tick duration (MSPT), CPU utilization, and RAM allocation.",
+      analytics: "Analyze player demographics, cohort retention ratios, micro-session active times, and global geographic data.",
+      inspector: "Search and inspect Minecraft player profiles, 3D skin renders, and detailed session telemetry.",
+      longtime: "Explore long-term historical performance trends, resolutions, and system resources of the ASPA server.",
+      pterodactyl: "Manage external nodes, access the remote command-line console, view server backups, and control power states.",
+      users: "Provision system dashboard user accounts, assign roles, manage security permissions, and audit registrations."
+    };
     const currentTabName = tabNames[activeTab] || "Dashboard";
     document.title = `ASPA Analytics - ${currentTabName}`;
+
+    let metaDescription = document.querySelector('meta[name="description"]');
+    if (!metaDescription) {
+      metaDescription = document.createElement('meta');
+      metaDescription.setAttribute('name', 'description');
+      document.head.appendChild(metaDescription);
+    }
+    metaDescription.setAttribute('content', tabDescriptions[activeTab] || 'ASPA Analytics Dashboard');
   }, [activeTab, isAuthenticated]);
 
   const toggleTheme = () => {
@@ -229,9 +328,10 @@ function App() {
         {hasPerm('health') && (
           <button
             onClick={() => {
-              setActiveTab('health');
+              navigate('/health');
               setIsMobileMenuOpen(false);
             }}
+            aria-current={activeTab === 'health' ? 'page' : undefined}
             className={`w-full flex items-center gap-3.5 px-4 py-2.5 rounded-xl text-xs font-bold transition-all text-left relative overflow-hidden group ${
               activeTab === 'health'
                 ? 'bg-plan-blue/5 text-plan-blue dark:bg-plan-blue/10 dark:text-white font-extrabold shadow-sm'
@@ -252,9 +352,10 @@ function App() {
         {hasPerm('analytics') && (
           <button
             onClick={() => {
-              setActiveTab('analytics');
+              navigate('/analytics');
               setIsMobileMenuOpen(false);
             }}
+            aria-current={activeTab === 'analytics' ? 'page' : undefined}
             className={`w-full flex items-center gap-3.5 px-4 py-2.5 rounded-xl text-xs font-bold transition-all text-left relative overflow-hidden group ${
               activeTab === 'analytics'
                 ? 'bg-plan-blue/5 text-plan-blue dark:bg-plan-blue/10 dark:text-white font-extrabold shadow-sm'
@@ -275,9 +376,10 @@ function App() {
         {hasPerm('inspector') && (
           <button
             onClick={() => {
-              setActiveTab('inspector');
+              navigate('/inspector');
               setIsMobileMenuOpen(false);
             }}
+            aria-current={activeTab === 'inspector' ? 'page' : undefined}
             className={`w-full flex items-center gap-3.5 px-4 py-2.5 rounded-xl text-xs font-bold transition-all text-left relative overflow-hidden group ${
               activeTab === 'inspector'
                 ? 'bg-plan-blue/5 text-plan-blue dark:bg-plan-blue/10 dark:text-white font-extrabold shadow-sm'
@@ -298,9 +400,10 @@ function App() {
         {hasPerm('longtime') && (
           <button
             onClick={() => {
-              setActiveTab('longtime');
+              navigate('/longtime');
               setIsMobileMenuOpen(false);
             }}
+            aria-current={activeTab === 'longtime' ? 'page' : undefined}
             className={`w-full flex items-center gap-3.5 px-4 py-2.5 rounded-xl text-xs font-bold transition-all text-left relative overflow-hidden group ${
               activeTab === 'longtime'
                 ? 'bg-plan-blue/5 text-plan-blue dark:bg-plan-blue/10 dark:text-white font-extrabold shadow-sm'
@@ -310,7 +413,7 @@ function App() {
             {activeTab === 'longtime' && (
               <div className="absolute left-0 top-1/4 bottom-1/4 w-1 rounded-r bg-plan-blue" />
             )}
-            <TrendingUp className={`w-4 h-4 shrink-0 transition-transform duration-300 group-hover:scale-105 ${activeTab === 'longtime' ? 'text-plan-blue dark:text-cyan-400' : 'text-slate-400 dark:text-slate-500 group-hover:text-slate-600 dark:group-hover:text-slate-355'}`} />
+            <TrendingUp className={`w-4 h-4 shrink-0 transition-transform duration-300 group-hover:scale-105 ${activeTab === 'longtime' ? 'text-plan-blue dark:text-cyan-400' : 'text-slate-400 dark:text-slate-500 group-hover:text-slate-600 group-hover:text-slate-600 dark:group-hover:text-slate-355'}`} />
             <div className="flex-1 min-w-0">
               <span className="block truncate">Longtime Graphs</span>
               <span className="block text-[8.5px] opacity-60 font-semibold mt-0.5 truncate">Historical trends & resolutions</span>
@@ -321,9 +424,10 @@ function App() {
         {hasPerm('pterodactyl') && pterodactylStatus?.enabled && (
           <button
             onClick={() => {
-              setActiveTab('pterodactyl');
+              navigate('/pterodactyl');
               setIsMobileMenuOpen(false);
             }}
+            aria-current={activeTab === 'pterodactyl' ? 'page' : undefined}
             className={`w-full flex items-center gap-3.5 px-4 py-2.5 rounded-xl text-xs font-bold transition-all text-left relative overflow-hidden group ${
               activeTab === 'pterodactyl'
                 ? 'bg-plan-blue/5 text-plan-blue dark:bg-plan-blue/10 dark:text-white font-extrabold shadow-sm'
@@ -345,9 +449,10 @@ function App() {
         {isAdmin && (
           <button
             onClick={() => {
-              setActiveTab('users');
+              navigate('/users');
               setIsMobileMenuOpen(false);
             }}
+            aria-current={activeTab === 'users' ? 'page' : undefined}
             className={`w-full flex items-center gap-3.5 px-4 py-2.5 rounded-xl text-xs font-bold transition-all text-left relative overflow-hidden group ${
               activeTab === 'users'
                 ? 'bg-plan-blue/5 text-plan-blue dark:bg-plan-blue/10 dark:text-white font-extrabold shadow-sm'
@@ -596,12 +701,17 @@ function App() {
 
         {/* Content Wrapper */}
         <main className="flex-grow p-4 md:p-6 lg:p-8 space-y-6 w-full max-w-7xl mx-auto">
-          {activeTab === 'health' && user?.permissions.includes('health') && <ServerHealth />}
-          {activeTab === 'analytics' && user?.permissions.includes('analytics') && <PlayerAnalytics />}
-          {activeTab === 'inspector' && user?.permissions.includes('inspector') && <PlayerInspector />}
-          {activeTab === 'longtime' && user?.permissions.includes('longtime') && <LongtimeGraphs />}
-          {activeTab === 'pterodactyl' && pterodactylStatus?.enabled && user?.permissions.includes('pterodactyl') && <PterodactylDashboard />}
-          {activeTab === 'users' && user?.role === 'ADMIN' && <UserManagement />}
+          <Suspense fallback={<TabLoader />}>
+            <Routes>
+              <Route path="/health" element={user?.permissions.includes('health') ? <ServerHealth /> : null} />
+              <Route path="/analytics" element={user?.permissions.includes('analytics') ? <PlayerAnalytics /> : null} />
+              <Route path="/inspector" element={user?.permissions.includes('inspector') ? <PlayerInspector /> : null} />
+              <Route path="/longtime" element={user?.permissions.includes('longtime') ? <LongtimeGraphs /> : null} />
+              <Route path="/pterodactyl" element={pterodactylStatus?.enabled && user?.permissions.includes('pterodactyl') ? <PterodactylDashboard /> : null} />
+              <Route path="/users" element={user?.role === 'ADMIN' ? <UserManagement /> : null} />
+              <Route path="*" element={null} />
+            </Routes>
+          </Suspense>
         </main>
       </div>
 
