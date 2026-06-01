@@ -9,6 +9,11 @@ import com.aspa.plugin.model.User
 import com.fasterxml.jackson.databind.ObjectMapper
 import com.zaxxer.hikari.HikariConfig
 import com.zaxxer.hikari.HikariDataSource
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.cancel
+import kotlinx.coroutines.future.future
 import java.sql.Connection
 import java.sql.PreparedStatement
 import java.sql.ResultSet
@@ -21,8 +26,6 @@ import java.util.HashMap
 import java.util.Optional
 import java.util.TimeZone
 import java.util.concurrent.CompletableFuture
-import java.util.concurrent.ExecutorService
-import java.util.concurrent.Executors
 
 class MySQLProvider(
     private val host: String,
@@ -36,7 +39,7 @@ class MySQLProvider(
     private val idleTimeout: Long,
     private val maxLifetime: Long
 ) : DatabaseProvider {
-    private val executor: ExecutorService = Executors.newFixedThreadPool(4)
+    private val dbScope = CoroutineScope(Dispatchers.IO + SupervisorJob())
     private var dataSource: HikariDataSource? = null
 
     @Throws(Exception::class)
@@ -156,21 +159,19 @@ class MySQLProvider(
     }
 
     override fun shutdown() {
+        dbScope.cancel()
         dataSource?.close()
-        executor.shutdown()
     }
 
     override fun saveServerMetrics(record: ServerMetricsRecord): CompletableFuture<Void> {
-        return CompletableFuture.runAsync(
-            {
-                try {
-                    saveServerMetricsBatch(Collections.singletonList(record))
-                } catch (e: Exception) {
-                    throw RuntimeException(e)
-                }
-            },
-            executor
-        )
+        return dbScope.future {
+            try {
+                saveServerMetricsBatch(Collections.singletonList(record))
+            } catch (e: Exception) {
+                e.printStackTrace()
+                throw e
+            }
+        }.thenApply<Void> { null }
     }
 
     @Throws(Exception::class)
@@ -180,33 +181,48 @@ class MySQLProvider(
         dataSource!!.connection.use { conn ->
             conn.prepareStatement(sql).use { ps ->
                 conn.autoCommit = false
-                for (r in records) {
-                    ps.setLong(1, r.timestamp)
-                    ps.setDouble(2, r.tps)
-                    ps.setDouble(3, r.mspt)
-                    ps.setDouble(4, r.cpuUsage)
-                    ps.setLong(5, r.ramUsedMb)
-                    ps.setLong(6, r.ramMaxMb)
-                    ps.setInt(7, r.onlinePlayers)
-                    ps.setInt(8, r.loadedChunks)
-                    ps.setString(9, serializeMap(r.entityCounts))
-                    ps.setLong(10, r.gcCountDelta)
-                    ps.setLong(11, r.gcTimeDeltaMs)
-                    ps.setDouble(12, r.avgPing)
-                    ps.setDouble(13, r.maxPing)
-                    ps.setString(14, serializeMap(r.chunksPerWorld))
-                    ps.setString(15, serializeMap(r.entitiesPerWorld))
-                    ps.addBatch()
+                try {
+                    for (r in records) {
+                        ps.setLong(1, r.timestamp)
+                        ps.setDouble(2, r.tps)
+                        ps.setDouble(3, r.mspt)
+                        ps.setDouble(4, r.cpuUsage)
+                        ps.setLong(5, r.ramUsedMb)
+                        ps.setLong(6, r.ramMaxMb)
+                        ps.setInt(7, r.onlinePlayers)
+                        ps.setInt(8, r.loadedChunks)
+                        ps.setString(9, serializeMap(r.entityCounts))
+                        ps.setLong(10, r.gcCountDelta)
+                        ps.setLong(11, r.gcTimeDeltaMs)
+                        ps.setDouble(12, r.avgPing)
+                        ps.setDouble(13, r.maxPing)
+                        ps.setString(14, serializeMap(r.chunksPerWorld))
+                        ps.setString(15, serializeMap(r.entitiesPerWorld))
+                        ps.addBatch()
+                    }
+                    ps.executeBatch()
+                    conn.commit()
+                } catch (e: Exception) {
+                    try {
+                        conn.rollback()
+                    } catch (_: SQLException) {
+                        // ignore
+                    }
+                    throw e
+                } finally {
+                    try {
+                        conn.autoCommit = true
+                    } catch (_: SQLException) {
+                        // ignore
+                    }
                 }
-                ps.executeBatch()
-                conn.commit()
             }
         }
     }
 
     override fun savePlayerSession(record: PlayerSessionRecord): CompletableFuture<Void> {
-        return CompletableFuture.runAsync(
-            {
+        return dbScope.future {
+            try {
                 dataSource!!.connection.use { conn ->
                     conn.autoCommit = false
                     try {
@@ -247,26 +263,36 @@ class MySQLProvider(
                         }
                         conn.commit()
                     } catch (e: Exception) {
-                        conn.rollback()
+                        try {
+                            conn.rollback()
+                        } catch (_: SQLException) {
+                            // ignore
+                        }
                         throw e
                     } finally {
-                        conn.autoCommit = true
+                        try {
+                            conn.autoCommit = true
+                        } catch (_: SQLException) {
+                            // ignore
+                        }
                     }
                 }
-            },
-            executor
-        )
+            } catch (e: Exception) {
+                e.printStackTrace()
+                throw e
+            }
+        }.thenApply<Void> { null }
     }
 
     override fun getServerMetricsHistory(
         startEpochMs: Long,
         endEpochMs: Long
     ): CompletableFuture<List<ServerMetricsRecord>> {
-        return CompletableFuture.supplyAsync(
-            {
-                val history = ArrayList<ServerMetricsRecord>()
-                val sql =
-                    "SELECT * FROM server_metrics WHERE timestamp >= ? AND timestamp <= ? ORDER BY timestamp ASC"
+        return dbScope.future {
+            val history = ArrayList<ServerMetricsRecord>()
+            val sql =
+                "SELECT * FROM server_metrics WHERE timestamp >= ? AND timestamp <= ? ORDER BY timestamp ASC"
+            try {
                 dataSource!!.connection.use { conn ->
                     conn.prepareStatement(sql).use { ps ->
                         ps.setLong(1, startEpochMs)
@@ -295,75 +321,100 @@ class MySQLProvider(
                         }
                     }
                 }
-                history
-            },
-            executor
-        )
+            } catch (e: SQLException) {
+                e.printStackTrace()
+                throw RuntimeException(e)
+            }
+            history
+        }
     }
 
     override fun getPlayerProfile(uuid: String): CompletableFuture<Optional<PlayerProfile>> {
-        return CompletableFuture.supplyAsync(
-            {
-                val sql = "SELECT * FROM player_profiles WHERE uuid = ?"
+        return dbScope.future {
+            val sql = "SELECT * FROM player_profiles WHERE uuid = ?"
+            var profile: PlayerProfile? = null
+            try {
                 dataSource!!.connection.use { conn ->
                     conn.prepareStatement(sql).use { ps ->
                         ps.setString(1, uuid)
                         ps.executeQuery().use { rs ->
                             if (rs.next()) {
-                                val profile = PlayerProfile()
-                                profile.uuid = rs.getString("uuid")
-                                profile.username = rs.getString("username")
-                                profile.firstLoginMs = rs.getLong("first_login_ms")
-                                profile.lastLoginMs = rs.getLong("last_login_ms")
-                                profile.totalPlaytimeMs = rs.getLong("total_playtime_ms")
-                                profile.averagePing = rs.getInt("average_ping")
-                                profile.countryCode = rs.getString("country_code")
-
-                                val sessions = loadSessionsForPlayer(uuid)
-                                profile.sessions = sessions
-                                profile.activityPunchcard = computePunchcard(sessions)
-                                return@supplyAsync Optional.of(profile)
+                                val p = PlayerProfile()
+                                p.uuid = rs.getString("uuid")
+                                p.username = rs.getString("username")
+                                p.firstLoginMs = rs.getLong("first_login_ms")
+                                p.lastLoginMs = rs.getLong("last_login_ms")
+                                p.totalPlaytimeMs = rs.getLong("total_playtime_ms")
+                                p.averagePing = rs.getInt("average_ping")
+                                p.countryCode = rs.getString("country_code")
+                                profile = p
                             }
                         }
                     }
                 }
-                Optional.empty()
-            },
-            executor
-        )
+            } catch (e: SQLException) {
+                e.printStackTrace()
+                throw RuntimeException(e)
+            }
+
+            if (profile != null) {
+                try {
+                    val sessions = loadSessionsForPlayer(uuid)
+                    profile!!.sessions = sessions
+                    profile!!.activityPunchcard = computePunchcard(sessions)
+                    Optional.of(profile!!)
+                } catch (e: SQLException) {
+                    e.printStackTrace()
+                    throw RuntimeException(e)
+                }
+            } else {
+                Optional.empty<PlayerProfile>()
+            }
+        }
     }
 
     override fun getPlayerProfileByName(username: String): CompletableFuture<Optional<PlayerProfile>> {
-        return CompletableFuture.supplyAsync(
-            {
-                val sql = "SELECT * FROM player_profiles WHERE username = ?"
+        return dbScope.future {
+            val sql = "SELECT * FROM player_profiles WHERE username = ?"
+            var profile: PlayerProfile? = null
+            try {
                 dataSource!!.connection.use { conn ->
                     conn.prepareStatement(sql).use { ps ->
                         ps.setString(1, username)
                         ps.executeQuery().use { rs ->
                             if (rs.next()) {
-                                val profile = PlayerProfile()
-                                val uuid = rs.getString("uuid")
-                                profile.uuid = uuid
-                                profile.username = rs.getString("username")
-                                profile.firstLoginMs = rs.getLong("first_login_ms")
-                                profile.lastLoginMs = rs.getLong("last_login_ms")
-                                profile.totalPlaytimeMs = rs.getLong("total_playtime_ms")
-                                profile.averagePing = rs.getInt("average_ping")
-                                profile.countryCode = rs.getString("country_code")
-
-                                val sessions = loadSessionsForPlayer(uuid)
-                                profile.sessions = sessions
-                                profile.activityPunchcard = computePunchcard(sessions)
-                                return@supplyAsync Optional.of(profile)
+                                val p = PlayerProfile()
+                                p.uuid = rs.getString("uuid")
+                                p.username = rs.getString("username")
+                                p.firstLoginMs = rs.getLong("first_login_ms")
+                                p.lastLoginMs = rs.getLong("last_login_ms")
+                                p.totalPlaytimeMs = rs.getLong("total_playtime_ms")
+                                p.averagePing = rs.getInt("average_ping")
+                                p.countryCode = rs.getString("country_code")
+                                profile = p
                             }
                         }
                     }
                 }
-                Optional.empty()
-            },
-            executor
-        )
+            } catch (e: SQLException) {
+                e.printStackTrace()
+                throw RuntimeException(e)
+            }
+
+            if (profile != null) {
+                try {
+                    val sessions = loadSessionsForPlayer(profile!!.uuid!!)
+                    profile!!.sessions = sessions
+                    profile!!.activityPunchcard = computePunchcard(sessions)
+                    Optional.of(profile!!)
+                } catch (e: SQLException) {
+                    e.printStackTrace()
+                    throw RuntimeException(e)
+                }
+            } else {
+                Optional.empty<PlayerProfile>()
+            }
+        }
     }
 
     @Throws(SQLException::class)
@@ -414,11 +465,11 @@ class MySQLProvider(
         startEpochMs: Long,
         endEpochMs: Long
     ): CompletableFuture<List<PlayerSessionRecord>> {
-        return CompletableFuture.supplyAsync(
-            {
-                val sessions = ArrayList<PlayerSessionRecord>()
-                val sql =
-                    "SELECT * FROM player_sessions WHERE login_ms >= ? AND login_ms <= ? ORDER BY login_ms ASC"
+        return dbScope.future {
+            val sessions = ArrayList<PlayerSessionRecord>()
+            val sql =
+                "SELECT * FROM player_sessions WHERE login_ms >= ? AND login_ms <= ? ORDER BY login_ms ASC"
+            try {
                 dataSource!!.connection.use { conn ->
                     conn.prepareStatement(sql).use { ps ->
                         ps.setLong(1, startEpochMs)
@@ -441,17 +492,19 @@ class MySQLProvider(
                         }
                     }
                 }
-                sessions
-            },
-            executor
-        )
+            } catch (e: SQLException) {
+                e.printStackTrace()
+                throw RuntimeException(e)
+            }
+            sessions
+        }
     }
 
     override fun saveAnomaly(anomaly: PerformanceAnomaly): CompletableFuture<Void> {
-        return CompletableFuture.runAsync(
-            {
-                val sql =
-                    "REPLACE INTO anomalies (timestamp, severity, tps, mspt, correlated_factors) VALUES (?, ?, ?, ?, ?)"
+        return dbScope.future {
+            val sql =
+                "REPLACE INTO anomalies (timestamp, severity, tps, mspt, correlated_factors) VALUES (?, ?, ?, ?, ?)"
+            try {
                 dataSource!!.connection.use { conn ->
                     conn.prepareStatement(sql).use { ps ->
                         ps.setLong(1, anomaly.timestamp)
@@ -462,16 +515,18 @@ class MySQLProvider(
                         ps.executeUpdate()
                     }
                 }
-            },
-            executor
-        )
+            } catch (e: SQLException) {
+                e.printStackTrace()
+                throw RuntimeException(e)
+            }
+        }.thenApply<Void> { null }
     }
 
     override fun getAnomalies(limit: Int): CompletableFuture<List<PerformanceAnomaly>> {
-        return CompletableFuture.supplyAsync(
-            {
-                val list = ArrayList<PerformanceAnomaly>()
-                val sql = "SELECT * FROM anomalies ORDER BY timestamp DESC LIMIT ?"
+        return dbScope.future {
+            val list = ArrayList<PerformanceAnomaly>()
+            val sql = "SELECT * FROM anomalies ORDER BY timestamp DESC LIMIT ?"
+            try {
                 dataSource!!.connection.use { conn ->
                     conn.prepareStatement(sql).use { ps ->
                         ps.setInt(1, limit)
@@ -488,19 +543,20 @@ class MySQLProvider(
                         }
                     }
                 }
-                list
-            },
-            executor
-        )
+            } catch (e: SQLException) {
+                e.printStackTrace()
+                throw RuntimeException(e)
+            }
+            list
+        }
     }
 
     override fun getUsers(): CompletableFuture<List<User>> {
-        return CompletableFuture.supplyAsync(
-            {
-                val list = ArrayList<User>()
-                val sql = "SELECT * FROM aspa_users"
-                try {
-                    val conn = dataSource!!.connection
+        return dbScope.future {
+            val list = ArrayList<User>()
+            val sql = "SELECT * FROM aspa_users"
+            try {
+                dataSource!!.connection.use { conn ->
                     conn.prepareStatement(sql).use { ps ->
                         ps.executeQuery().use { rs ->
                             while (rs.next()) {
@@ -516,26 +572,25 @@ class MySQLProvider(
                             }
                         }
                     }
-                } catch (e: SQLException) {
-                    throw RuntimeException(e)
                 }
-                list
-            },
-            executor
-        )
+            } catch (e: SQLException) {
+                e.printStackTrace()
+                throw RuntimeException(e)
+            }
+            list
+        }
     }
 
     override fun getUser(username: String): CompletableFuture<Optional<User>> {
-        return CompletableFuture.supplyAsync(
-            {
-                val sql = "SELECT * FROM aspa_users WHERE username = ?"
-                try {
-                    val conn = dataSource!!.connection
+        return dbScope.future {
+            val sql = "SELECT * FROM aspa_users WHERE username = ?"
+            try {
+                dataSource!!.connection.use { conn ->
                     conn.prepareStatement(sql).use { ps ->
                         ps.setString(1, username)
                         ps.executeQuery().use { rs ->
                             if (rs.next()) {
-                                return@supplyAsync Optional.of(
+                                return@future Optional.of(
                                     User(
                                         rs.getString("username"),
                                         rs.getString("password_hash"),
@@ -547,26 +602,25 @@ class MySQLProvider(
                             }
                         }
                     }
-                } catch (e: SQLException) {
-                    throw RuntimeException(e)
                 }
-                Optional.empty()
-            },
-            executor
-        )
+            } catch (e: SQLException) {
+                e.printStackTrace()
+                throw RuntimeException(e)
+            }
+            Optional.empty<User>()
+        }
     }
 
     override fun getUserByToken(token: String): CompletableFuture<Optional<User>> {
-        return CompletableFuture.supplyAsync(
-            {
-                val sql = "SELECT * FROM aspa_users WHERE token = ?"
-                try {
-                    val conn = dataSource!!.connection
+        return dbScope.future {
+            val sql = "SELECT * FROM aspa_users WHERE token = ?"
+            try {
+                dataSource!!.connection.use { conn ->
                     conn.prepareStatement(sql).use { ps ->
                         ps.setString(1, token)
                         ps.executeQuery().use { rs ->
                             if (rs.next()) {
-                                return@supplyAsync Optional.of(
+                                return@future Optional.of(
                                     User(
                                         rs.getString("username"),
                                         rs.getString("password_hash"),
@@ -578,21 +632,20 @@ class MySQLProvider(
                             }
                         }
                     }
-                } catch (e: SQLException) {
-                    throw RuntimeException(e)
                 }
-                Optional.empty()
-            },
-            executor
-        )
+            } catch (e: SQLException) {
+                e.printStackTrace()
+                throw RuntimeException(e)
+            }
+            Optional.empty<User>()
+        }
     }
 
     override fun saveUser(user: User): CompletableFuture<Void> {
-        return CompletableFuture.runAsync(
-            {
-                val sql = "REPLACE INTO aspa_users (username, password_hash, role, permissions, token) VALUES (?, ?, ?, ?, ?)"
-                try {
-                    val conn = dataSource!!.connection
+        return dbScope.future {
+            val sql = "REPLACE INTO aspa_users (username, password_hash, role, permissions, token) VALUES (?, ?, ?, ?, ?)"
+            try {
+                dataSource!!.connection.use { conn ->
                     conn.prepareStatement(sql).use { ps ->
                         ps.setString(1, user.username)
                         ps.setString(2, user.passwordHash)
@@ -601,49 +654,47 @@ class MySQLProvider(
                         ps.setString(5, user.token)
                         ps.executeUpdate()
                     }
-                } catch (e: SQLException) {
-                    throw RuntimeException(e)
                 }
-            },
-            executor
-        )
+            } catch (e: SQLException) {
+                e.printStackTrace()
+                throw RuntimeException(e)
+            }
+        }.thenApply<Void> { null }
     }
 
     override fun deleteUser(username: String): CompletableFuture<Void> {
-        return CompletableFuture.runAsync(
-            {
-                val sql = "DELETE FROM aspa_users WHERE username = ?"
-                try {
-                    val conn = dataSource!!.connection
+        return dbScope.future {
+            val sql = "DELETE FROM aspa_users WHERE username = ?"
+            try {
+                dataSource!!.connection.use { conn ->
                     conn.prepareStatement(sql).use { ps ->
                         ps.setString(1, username)
                         ps.executeUpdate()
                     }
-                } catch (e: SQLException) {
-                    throw RuntimeException(e)
                 }
-            },
-            executor
-        )
+            } catch (e: SQLException) {
+                e.printStackTrace()
+                throw RuntimeException(e)
+            }
+        }.thenApply<Void> { null }
     }
 
     override fun hasAnyUser(): CompletableFuture<Boolean> {
-        return CompletableFuture.supplyAsync(
-            {
-                val sql = "SELECT 1 FROM aspa_users LIMIT 1"
-                try {
-                    val conn = dataSource!!.connection
+        return dbScope.future {
+            val sql = "SELECT 1 FROM aspa_users LIMIT 1"
+            try {
+                dataSource!!.connection.use { conn ->
                     conn.prepareStatement(sql).use { ps ->
                         ps.executeQuery().use { rs ->
-                            return@supplyAsync rs.next()
+                            return@future rs.next()
                         }
                     }
-                } catch (e: SQLException) {
-                    throw RuntimeException(e)
                 }
-            },
-            executor
-        )
+            } catch (e: SQLException) {
+                e.printStackTrace()
+                throw RuntimeException(e)
+            }
+        }
     }
 
     private companion object {

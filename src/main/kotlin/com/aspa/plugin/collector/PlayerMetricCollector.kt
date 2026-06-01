@@ -332,7 +332,7 @@ class PlayerMetricCollector(private val plugin: ASPA) : MetricCollector, Listene
         val player = event.player
         val uuidStr = player.uniqueId.toString()
         handlePlayerQuit(uuidStr).thenAccept { record ->
-            plugin.getDatabaseProvider()?.savePlayerSession(record)
+            plugin.getMetricsBufferManager()?.submitPlayerSession(record)
         }.exceptionally { ex ->
             plugin.logger.severe("Failed to process player quit session for ${player.name}: ${ex.message}")
             null

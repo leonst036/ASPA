@@ -26,6 +26,7 @@ dependencies {
     implementation("com.mysql:mysql-connector-j:8.3.0")
     implementation("com.zaxxer:HikariCP:5.1.0")
     implementation("org.mongodb:mongodb-driver-sync:4.11.1")
+    implementation("org.jetbrains.kotlinx:kotlinx-coroutines-core:1.8.1")
 
     // GeoIP Database Reader
     implementation("com.maxmind.geoip2:geoip2:4.2.0")
@@ -36,7 +37,7 @@ dependencies {
 
 java {
     toolchain {
-        languageVersion.set(JavaLanguageVersion.of(26))
+        languageVersion.set(JavaLanguageVersion.of(21))
     }
 }
 

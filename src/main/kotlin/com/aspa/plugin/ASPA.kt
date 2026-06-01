@@ -3,6 +3,7 @@ package com.aspa.plugin
 import com.aspa.plugin.analysis.StatisticsEngine
 import com.aspa.plugin.api.AnalysisEngine
 import com.aspa.plugin.api.DatabaseProvider
+import com.aspa.plugin.collector.MetricsBufferManager
 import com.aspa.plugin.collector.PlayerMetricCollector
 import com.aspa.plugin.collector.ServerMetricCollector
 import com.aspa.plugin.database.DatabaseManager
@@ -27,6 +28,7 @@ class ASPA : JavaPlugin(), TabExecutor {
 
     private var serverMetricCollector: ServerMetricCollector? = null
     private var playerMetricCollector: PlayerMetricCollector? = null
+    private var metricsBufferManager: MetricsBufferManager? = null
     private var pterodactylService: PterodactylService? = null
     private var embeddedServer: EmbeddedServer? = null
 
@@ -77,6 +79,7 @@ class ASPA : JavaPlugin(), TabExecutor {
                 dbFlushInterval
             )
             setDatabaseProvider(dbManager)
+            metricsBufferManager = MetricsBufferManager(this).also { it.start() }
         } catch (e: Exception) {
             logger.severe("Failed to construct DatabaseManager: ${e.message}")
             e.printStackTrace()
@@ -135,6 +138,15 @@ class ASPA : JavaPlugin(), TabExecutor {
             }
         }
 
+        if (metricsBufferManager != null) {
+            try {
+                metricsBufferManager?.shutdown()
+                logger.info("MetricsBufferManager cleanly shut down and flushed.")
+            } catch (e: Exception) {
+                logger.severe("Error during MetricsBufferManager shutdown: ${e.message}")
+            }
+        }
+
         if (databaseProvider != null) {
             try {
                 databaseProvider?.shutdown()
@@ -149,6 +161,8 @@ class ASPA : JavaPlugin(), TabExecutor {
     }
 
     fun getDatabaseProvider(): DatabaseProvider? = databaseProvider
+
+    fun getMetricsBufferManager(): MetricsBufferManager? = metricsBufferManager
 
     fun setDatabaseProvider(databaseProvider: DatabaseProvider?) {
         this.databaseProvider = databaseProvider
@@ -201,10 +215,7 @@ class ASPA : JavaPlugin(), TabExecutor {
                 val collector = serverMetricCollector ?: return@Runnable
                 collector.collectServerMetrics()
                     .thenAccept { record ->
-                        databaseProvider?.saveServerMetrics(record)?.exceptionally { ex ->
-                            logger.severe("Failed to save server metrics: ${ex.message}")
-                            null
-                        }
+                        metricsBufferManager?.submitServerMetric(record)
                     }
                     .exceptionally { ex ->
                         logger.severe("Failed to collect server metrics: ${ex.message}")
@@ -215,13 +226,7 @@ class ASPA : JavaPlugin(), TabExecutor {
             20L * collectInterval
         )
 
-        val flushInterval = config.getInt("ingestion.db-flush-interval-seconds", 30)
-        dbFlushTask = Bukkit.getScheduler().runTaskTimerAsynchronously(
-            this,
-            Runnable { logger.fine("ASPA Database Flush sync completed.") },
-            20L * flushInterval,
-            20L * flushInterval
-        )
+        // dbFlushTask is now fully handled by MetricsBufferManager
 
         val crunchInterval = config.getInt("analysis.crunch-interval-minutes", 15)
         crunchTask = Bukkit.getScheduler().runTaskTimerAsynchronously(

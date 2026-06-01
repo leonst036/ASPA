@@ -10,10 +10,6 @@ import java.io.File
 import java.util.Collections
 import java.util.Optional
 import java.util.concurrent.CompletableFuture
-import java.util.concurrent.ConcurrentLinkedQueue
-import java.util.concurrent.Executors
-import java.util.concurrent.ScheduledExecutorService
-import java.util.concurrent.TimeUnit
 
 class DatabaseManager(
     driver: String,
@@ -23,9 +19,6 @@ class DatabaseManager(
 ) : DatabaseProvider {
     private val driver: String = driver.uppercase()
     private val activeProvider: DatabaseProvider
-
-    private val metricsQueue: ConcurrentLinkedQueue<ServerMetricsRecord> = ConcurrentLinkedQueue()
-    private val scheduler: ScheduledExecutorService = Executors.newSingleThreadScheduledExecutor()
 
     init {
         activeProvider = when (this.driver) {
@@ -79,55 +72,14 @@ class DatabaseManager(
 
     override fun initialize() {
         activeProvider.initialize()
-        scheduler.scheduleAtFixedRate(
-            this::flushMetrics,
-            flushIntervalSeconds,
-            flushIntervalSeconds,
-            TimeUnit.SECONDS
-        )
     }
 
     override fun shutdown() {
-        scheduler.shutdown()
-        try {
-            scheduler.awaitTermination(5, TimeUnit.SECONDS)
-        } catch (e: InterruptedException) {
-            Thread.currentThread().interrupt()
-        }
-
-        flushMetrics()
         activeProvider.shutdown()
     }
 
-    override fun saveServerMetrics(record: ServerMetricsRecord): CompletableFuture<Void> {
-        metricsQueue.offer(record)
-        return CompletableFuture.completedFuture(null)
-    }
-
-    private fun flushMetrics() {
-        val batch = ArrayList<ServerMetricsRecord>()
-        while (true) {
-            val record = metricsQueue.poll() ?: break
-            batch.add(record)
-        }
-
-        if (batch.isNotEmpty()) {
-            try {
-                when (activeProvider) {
-                    is SQLiteProvider -> activeProvider.saveServerMetricsBatch(batch)
-                    is MySQLProvider -> activeProvider.saveServerMetricsBatch(batch)
-                    is MongoDBProvider -> activeProvider.saveServerMetricsBatch(batch)
-                    else -> {
-                        for (r in batch) {
-                            activeProvider.saveServerMetrics(r).get()
-                        }
-                    }
-                }
-            } catch (e: Exception) {
-                e.printStackTrace()
-            }
-        }
-    }
+    override fun saveServerMetrics(record: ServerMetricsRecord): CompletableFuture<Void> =
+        activeProvider.saveServerMetrics(record)
 
     override fun savePlayerSession(record: PlayerSessionRecord): CompletableFuture<Void> =
         activeProvider.savePlayerSession(record)
