@@ -1,5 +1,5 @@
 name: ASPA
-version: 0.0.6
+version: 0.0.7
 main: com.aspa.plugin.ASPA
 api-version: 1.20
 description: Advanced Server Performance Analytics.
