@@ -36,6 +36,14 @@ ingestion:
   # Frequency in seconds to push batched database inserts to disk
   db-flush-interval-seconds: 30
 
+# Metrics RAM Cache Configuration
+# Caches server metrics in memory for the web dashboard to prevent repeated database queries.
+cache:
+  # The maximum size in MB of historical metric records to keep in memory (RAM).
+  # Assuming default ingestion interval, 50 MB stores ~25,000 records (~3 days of history).
+  # Set to 0 to disable the RAM cache.
+  max-size-mb: 50
+
 # Data Analysis Configuration
 analysis:
   # Frequency in minutes to crunch historical statistics, anomalies, and forecasting

@@ -3,6 +3,7 @@ package com.aspa.plugin.server
 import com.aspa.plugin.api.AnalysisEngine
 import com.aspa.plugin.api.DatabaseProvider
 import com.aspa.plugin.api.MetricCollector
+import com.aspa.plugin.collector.MetricsCache
 import com.aspa.plugin.pterodactyl.PterodactylService
 import io.javalin.Javalin
 import io.javalin.http.staticfiles.Location
@@ -12,7 +13,8 @@ class EmbeddedServer(
     private val databaseProvider: DatabaseProvider,
     private val metricCollector: MetricCollector,
     private val analysisEngine: AnalysisEngine,
-    private val pterodactylService: PterodactylService
+    private val pterodactylService: PterodactylService,
+    private val metricsCache: MetricsCache
 ) {
     private var app: Javalin? = null
 
@@ -60,7 +62,7 @@ class EmbeddedServer(
 
         // Register Controllers
         AuthController(databaseProvider).register(app!!)
-        MetricController(databaseProvider, metricCollector).register(app!!)
+        MetricController(databaseProvider, metricCollector, metricsCache).register(app!!)
         PlayerController(databaseProvider, analysisEngine).register(app!!)
         PterodactylController(pterodactylService).register(app!!)
         StaticController().register(app!!)

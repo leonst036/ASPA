@@ -4,6 +4,7 @@ import com.aspa.plugin.analysis.StatisticsEngine
 import com.aspa.plugin.api.AnalysisEngine
 import com.aspa.plugin.api.DatabaseProvider
 import com.aspa.plugin.collector.MetricsBufferManager
+import com.aspa.plugin.collector.MetricsCache
 import com.aspa.plugin.collector.PlayerMetricCollector
 import com.aspa.plugin.collector.ServerMetricCollector
 import com.aspa.plugin.database.DatabaseManager
@@ -19,6 +20,10 @@ import org.bukkit.configuration.ConfigurationSection
 import org.bukkit.plugin.java.JavaPlugin
 import org.bukkit.scheduler.BukkitTask
 import java.util.concurrent.CompletableFuture
+import org.bukkit.configuration.file.YamlConfiguration
+import java.io.File
+import java.io.InputStreamReader
+import java.nio.charset.StandardCharsets
 
 class ASPA : JavaPlugin(), TabExecutor {
     private val startTime = System.currentTimeMillis()
@@ -29,6 +34,7 @@ class ASPA : JavaPlugin(), TabExecutor {
     private var serverMetricCollector: ServerMetricCollector? = null
     private var playerMetricCollector: PlayerMetricCollector? = null
     private var metricsBufferManager: MetricsBufferManager? = null
+    private var metricsCache: MetricsCache? = null
     private var pterodactylService: PterodactylService? = null
     private var embeddedServer: EmbeddedServer? = null
 
@@ -45,7 +51,7 @@ class ASPA : JavaPlugin(), TabExecutor {
         instance = this
 
         printBanner()
-        saveDefaultConfig()
+        saveDefaultConfigAndMigrate()
 
         serverMetricCollector = ServerMetricCollector(this).also { it.start() }
         playerMetricCollector = PlayerMetricCollector(this).also { it.start() }
@@ -80,6 +86,10 @@ class ASPA : JavaPlugin(), TabExecutor {
             )
             setDatabaseProvider(dbManager)
             metricsBufferManager = MetricsBufferManager(this).also { it.start() }
+
+            val cacheMaxSizeMb = config.getInt("cache.max-size-mb", 50)
+            metricsCache = MetricsCache(cacheMaxSizeMb)
+            warmupMetricsCache()
         } catch (e: Exception) {
             logger.severe("Failed to construct DatabaseManager: ${e.message}")
             e.printStackTrace()
@@ -105,7 +115,8 @@ class ASPA : JavaPlugin(), TabExecutor {
             databaseProvider!!,
             serverMetricCollector!!,
             analysisEngine!!,
-            pterodactylService!!
+            pterodactylService!!,
+            metricsCache!!
         )
         try {
             embeddedServer?.start()
@@ -164,6 +175,8 @@ class ASPA : JavaPlugin(), TabExecutor {
 
     fun getMetricsBufferManager(): MetricsBufferManager? = metricsBufferManager
 
+    fun getMetricsCache(): MetricsCache? = metricsCache
+
     fun setDatabaseProvider(databaseProvider: DatabaseProvider?) {
         this.databaseProvider = databaseProvider
         if (databaseProvider != null) {
@@ -215,6 +228,7 @@ class ASPA : JavaPlugin(), TabExecutor {
                 val collector = serverMetricCollector ?: return@Runnable
                 collector.collectServerMetrics()
                     .thenAccept { record ->
+                        metricsCache?.add(record)
                         metricsBufferManager?.submitServerMetric(record)
                     }
                     .exceptionally { ex ->
@@ -302,7 +316,11 @@ class ASPA : JavaPlugin(), TabExecutor {
 
         when (args[0].lowercase()) {
             "reload" -> {
+                saveDefaultConfigAndMigrate()
                 reloadConfig()
+                val cacheMaxSizeMb = config.getInt("cache.max-size-mb", 50)
+                metricsCache?.reconfigure(cacheMaxSizeMb)
+                warmupMetricsCache()
                 startSchedulers()
                 sender.sendMessage("§a[ASPA] Configuration reloaded successfully!")
             }
@@ -380,6 +398,75 @@ class ASPA : JavaPlugin(), TabExecutor {
             return completions
         }
         return emptyList()
+    }
+
+    private fun saveDefaultConfigAndMigrate() {
+        val configFile = File(dataFolder, "config.yml")
+        if (!configFile.exists()) {
+            saveDefaultConfig()
+            return
+        }
+
+        val defaultStream = getResource("config.yml") ?: return
+        defaultStream.use { stream ->
+            val defaultConfig = YamlConfiguration.loadConfiguration(InputStreamReader(stream, StandardCharsets.UTF_8))
+            val currentConfig = YamlConfiguration.loadConfiguration(configFile)
+
+            var modified = false
+            for (key in defaultConfig.getKeys(true)) {
+                if (!currentConfig.contains(key)) {
+                    if (!defaultConfig.isConfigurationSection(key)) {
+                        currentConfig.set(key, defaultConfig.get(key))
+                        modified = true
+                    }
+                    try {
+                        val comments = defaultConfig.getComments(key)
+                        if (comments.isNotEmpty()) {
+                            currentConfig.setComments(key, comments)
+                        }
+                        val inlineComments = defaultConfig.getInlineComments(key)
+                        if (inlineComments.isNotEmpty()) {
+                            currentConfig.setInlineComments(key, inlineComments)
+                        }
+                    } catch (ignored: NoSuchMethodError) {
+                        // Support older Bukkit versions without the comments API
+                    }
+                }
+            }
+
+            if (modified) {
+                try {
+                    currentConfig.save(configFile)
+                    logger.info("Updated config.yml with new configuration options.")
+                } catch (e: Exception) {
+                    logger.severe("Could not save updated config.yml: ${e.message}")
+                }
+            }
+        }
+    }
+
+    private fun warmupMetricsCache() {
+        val cache = metricsCache ?: return
+        val maxRecords = cache.getMaxRecords()
+        if (maxRecords <= 0) return
+
+        val now = System.currentTimeMillis()
+        val collectInterval = config.getInt("ingestion.collect-interval-seconds", 10)
+        val lookbackMs = maxRecords.toLong() * collectInterval * 1000L * 2
+        val start = now - lookbackMs
+
+        databaseProvider?.getServerMetricsHistory(start, now)?.thenAccept { records ->
+            val toAdd = if (records.size > maxRecords) {
+                records.subList(records.size - maxRecords, records.size)
+            } else {
+                records
+            }
+            cache.addAll(toAdd)
+            logger.info("Loaded ${toAdd.size} metric records from database into RAM cache.")
+        }?.exceptionally { ex ->
+            logger.severe("Failed to warm up metrics RAM cache: ${ex.message}")
+            null
+        }
     }
 
     companion object {

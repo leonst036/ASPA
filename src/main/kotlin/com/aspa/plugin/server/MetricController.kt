@@ -3,14 +3,17 @@ package com.aspa.plugin.server
 import com.aspa.plugin.ASPA
 import com.aspa.plugin.api.DatabaseProvider
 import com.aspa.plugin.api.MetricCollector
+import com.aspa.plugin.collector.MetricsCache
 import io.javalin.Javalin
 import io.javalin.http.Context
 import java.util.ArrayList
 import java.util.HashMap
+import java.util.concurrent.CompletableFuture
 
 class MetricController(
     private val databaseProvider: DatabaseProvider,
-    private val metricCollector: MetricCollector
+    private val metricCollector: MetricCollector,
+    private val metricsCache: MetricsCache
 ) {
     fun register(app: Javalin) {
         app.get("/api/v1/status") { getStatus(it) }
@@ -50,7 +53,12 @@ class MetricController(
             ctx.queryParamAsClass("start", Long::class.javaObjectType).getOrDefault(now - 2 * 60 * 60 * 1000L)
         val end = ctx.queryParamAsClass("end", Long::class.javaObjectType).getOrDefault(now)
 
-        val future = databaseProvider.getServerMetricsHistory(start, end).thenApply { history ->
+        val cached = metricsCache.getRange(start, end)
+        val future = (if (cached != null) {
+            CompletableFuture.completedFuture(cached)
+        } else {
+            databaseProvider.getServerMetricsHistory(start, end)
+        }).thenApply { history ->
             val response = HashMap<String, Any>()
             response["start"] = start
             response["end"] = end
@@ -94,7 +102,12 @@ class MetricController(
         val finalBucketMs = bucket.first
         val finalResolution = bucket.second
 
-        val future = databaseProvider.getServerMetricsHistory(start, end).thenApply { rawHistory ->
+        val cached = metricsCache.getRange(start, end)
+        val future = (if (cached != null) {
+            CompletableFuture.completedFuture(cached)
+        } else {
+            databaseProvider.getServerMetricsHistory(start, end)
+        }).thenApply { rawHistory ->
             val buckets = java.util.TreeMap<Long, MutableList<com.aspa.plugin.model.ServerMetricsRecord>>()
             for (r in rawHistory) {
                 val bucketKey = (r.timestamp / finalBucketMs) * finalBucketMs
