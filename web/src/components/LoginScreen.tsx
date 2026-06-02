@@ -14,7 +14,7 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({ onLoginSuccess }) => {
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
   const [customUrl, setCustomUrl] = useState('');
-  
+
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState(false);
@@ -93,7 +93,7 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({ onLoginSuccess }) => {
 
   return (
     <div className="min-h-screen flex items-center justify-center bg-plan-lightBg dark:bg-plan-bg font-sans p-4 relative overflow-hidden transition-colors duration-300">
-      
+
       {/* Background Gradient Orbs */}
       <div className="absolute top-[-20%] left-[-10%] w-[50%] h-[60%] rounded-full bg-plan-cyan/5 dark:bg-plan-cyan/2 blur-[120px]" />
       <div className="absolute bottom-[-20%] right-[-10%] w-[50%] h-[60%] rounded-full bg-plan-blue/5 dark:bg-plan-blue/2 blur-[120px]" />
@@ -144,66 +144,48 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({ onLoginSuccess }) => {
         )}
 
         <form onSubmit={handleSubmit} className="space-y-4">
-          <div>
-            <label className="block text-[10px] font-black uppercase tracking-widest text-slate-500 mb-1.5 pl-0.5">
-              API Server Address (Optional)
-            </label>
-            <div className="relative">
-              <span className="absolute inset-y-0 left-0 pl-3 flex items-center text-slate-400 dark:text-slate-500">
-                <Server className="w-4 h-4" />
-              </span>
-              <input
-                type="url"
-                placeholder="e.g. http://localhost:8080 (Leave empty for default)"
-                value={customUrl}
-                onChange={(e) => setCustomUrl(e.target.value)}
-                disabled={loading || success}
-                className="w-full pl-9 pr-3 py-2.5 rounded-xl border border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-900 text-slate-800 dark:text-slate-100 text-sm focus:outline-none focus:ring-2 focus:ring-plan-cyan/40 focus:border-plan-cyan transition-all placeholder:text-slate-400 dark:placeholder:text-slate-500"
-              />
+
+          <>
+            <div>
+              <label className="block text-[10px] font-black uppercase tracking-widest text-slate-500 mb-1.5 pl-0.5">
+                {setupRequired ? 'Create Admin Username' : 'Username'}
+              </label>
+              <div className="relative">
+                <span className="absolute inset-y-0 left-0 pl-3 flex items-center text-slate-400 dark:text-slate-500">
+                  <User className="w-4 h-4" />
+                </span>
+                <input
+                  type="text"
+                  required
+                  placeholder={setupRequired ? 'e.g. administrator' : 'Enter username'}
+                  value={username}
+                  onChange={(e) => setUsername(e.target.value)}
+                  disabled={loading || success}
+                  className="w-full pl-9 pr-3 py-2.5 rounded-xl border border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-900 text-slate-800 dark:text-slate-100 text-sm focus:outline-none focus:ring-2 focus:ring-plan-cyan/40 focus:border-plan-cyan transition-all placeholder:text-slate-400 dark:placeholder:text-slate-500"
+                />
+              </div>
             </div>
-          </div>
 
-            <>
-              <div>
-                <label className="block text-[10px] font-black uppercase tracking-widest text-slate-500 mb-1.5 pl-0.5">
-                  {setupRequired ? 'Create Admin Username' : 'Username'}
-                </label>
-                <div className="relative">
-                  <span className="absolute inset-y-0 left-0 pl-3 flex items-center text-slate-400 dark:text-slate-500">
-                    <User className="w-4 h-4" />
-                  </span>
-                  <input
-                    type="text"
-                    required
-                    placeholder={setupRequired ? 'e.g. administrator' : 'Enter username'}
-                    value={username}
-                    onChange={(e) => setUsername(e.target.value)}
-                    disabled={loading || success}
-                    className="w-full pl-9 pr-3 py-2.5 rounded-xl border border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-900 text-slate-800 dark:text-slate-100 text-sm focus:outline-none focus:ring-2 focus:ring-plan-cyan/40 focus:border-plan-cyan transition-all placeholder:text-slate-400 dark:placeholder:text-slate-500"
-                  />
-                </div>
+            <div>
+              <label className="block text-[10px] font-black uppercase tracking-widest text-slate-500 mb-1.5 pl-0.5">
+                {setupRequired ? 'Create Password' : 'Password'}
+              </label>
+              <div className="relative">
+                <span className="absolute inset-y-0 left-0 pl-3 flex items-center text-slate-400 dark:text-slate-500">
+                  <KeyRound className="w-4 h-4" />
+                </span>
+                <input
+                  type="password"
+                  required
+                  placeholder={setupRequired ? 'Set administrative password' : 'Enter password'}
+                  value={password}
+                  onChange={(e) => setPassword(e.target.value)}
+                  disabled={loading || success}
+                  className="w-full pl-9 pr-3 py-2.5 rounded-xl border border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-900 text-slate-800 dark:text-slate-100 text-sm focus:outline-none focus:ring-2 focus:ring-plan-cyan/40 focus:border-plan-cyan transition-all placeholder:text-slate-400 dark:placeholder:text-slate-500"
+                />
               </div>
-
-              <div>
-                <label className="block text-[10px] font-black uppercase tracking-widest text-slate-500 mb-1.5 pl-0.5">
-                  {setupRequired ? 'Create Password' : 'Password'}
-                </label>
-                <div className="relative">
-                  <span className="absolute inset-y-0 left-0 pl-3 flex items-center text-slate-400 dark:text-slate-500">
-                    <KeyRound className="w-4 h-4" />
-                  </span>
-                  <input
-                    type="password"
-                    required
-                    placeholder={setupRequired ? 'Set administrative password' : 'Enter password'}
-                    value={password}
-                    onChange={(e) => setPassword(e.target.value)}
-                    disabled={loading || success}
-                    className="w-full pl-9 pr-3 py-2.5 rounded-xl border border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-900 text-slate-800 dark:text-slate-100 text-sm focus:outline-none focus:ring-2 focus:ring-plan-cyan/40 focus:border-plan-cyan transition-all placeholder:text-slate-400 dark:placeholder:text-slate-500"
-                  />
-                </div>
-              </div>
-            </>
+            </div>
+          </>
 
           <button
             type="submit"
