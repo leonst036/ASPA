@@ -27,7 +27,7 @@ class MetricController(
         val future = sessionsFuture.thenCombine(metricCollector.collectServerMetrics()) { sessions, record ->
             val status = HashMap<String, Any>()
             status["status"] = "online"
-            status["version"] = "ASPA v1.0.0"
+            status["version"] = "ASPA v${ASPA.getInstance()?.description?.version ?: "0.0.8"}"
             status["uptimeMs"] = System.currentTimeMillis() - ASPA.getInstance()!!.getStartTime()
             status["databaseDriver"] = ASPA.getInstance()!!.getDatabaseDriverName()
 

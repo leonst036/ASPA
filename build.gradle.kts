@@ -1,10 +1,11 @@
 plugins {
     kotlin("jvm") version "1.9.24"
     id("com.gradleup.shadow") version "9.4.1"
+
 }
 
 group = "com.aspa.plugin"
-version = "1.0.0-SNAPSHOT"
+version = "0.0.8"
 
 repositories {
     mavenCentral()
@@ -15,6 +16,8 @@ repositories {
 dependencies {
     // Spigot API (Provided by Server)
     compileOnly("org.spigotmc:spigot-api:1.20.4-R0.1-SNAPSHOT")
+    implementation("org.bstats:bstats-bukkit:3.2.1")
+
 
     // Embedded HTTP Server
     implementation("io.javalin:javalin:6.1.3")

@@ -1,5 +1,5 @@
 name: ASPA
-version: 1.0.0
+version: 0.0.8
 main: com.aspa.plugin.ASPA
 api-version: 1.20
 description: Advanced Server Performance Analytics monolithic ecosystem.
