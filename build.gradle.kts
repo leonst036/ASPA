@@ -90,6 +90,7 @@ tasks {
         archiveClassifier.set("")
         dependsOn(processResources)
         // Relocate libraries to avoid collisions with other plugins
+        relocate("org.bstats", "com.aspa.plugin.bstats")
         // relocate("io.javalin", "com.aspa.plugin.libs.javalin")
         // relocate("com.fasterxml.jackson", "com.aspa.plugin.libs.jackson")
         // relocate("com.zaxxer.hikari", "com.aspa.plugin.libs.hikari")

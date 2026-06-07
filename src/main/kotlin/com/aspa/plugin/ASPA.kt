@@ -18,6 +18,9 @@ import org.bukkit.command.TabExecutor
 import org.bukkit.configuration.ConfigurationSection
 import org.bukkit.plugin.java.JavaPlugin
 import org.bukkit.scheduler.BukkitTask
+import org.bstats.bukkit.Metrics
+import org.bstats.charts.SimplePie
+import java.util.concurrent.Callable
 import java.util.concurrent.CompletableFuture
 
 class ASPA : JavaPlugin(), TabExecutor {
@@ -46,6 +49,11 @@ class ASPA : JavaPlugin(), TabExecutor {
 
         printBanner()
         saveDefaultConfig()
+
+        // Instantiate bStats Metrics
+        val pluginId = 31849
+        val metrics = Metrics(this, pluginId)
+        metrics.addCustomChart(SimplePie("chart_id", Callable { "My value" }))
 
         serverMetricCollector = ServerMetricCollector(this).also { it.start() }
         playerMetricCollector = PlayerMetricCollector(this).also { it.start() }
